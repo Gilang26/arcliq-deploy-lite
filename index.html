@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ARCLIQ Deploy Lite v2</title>
+<title>ARCLIQ Deploy Lite v3</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -47,8 +47,8 @@ footer {text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
 </head>
 <body>
 <div class="container">
-  <h1>ARCLIQ Deploy Lite ⚡ v2</h1>
-  <div class="sub">Deploy Solidity contract langsung ke Arc Testnet (5042002)</div>
+  <h1>ARCLIQ Deploy Lite ⚡ v3</h1>
+  <div class="sub">Auto WalletConnect Fallback — Arc Testnet (5042002)</div>
 
   <div class="card">
     <button id="connectBtn">🔗 Connect Wallet</button>
@@ -83,62 +83,56 @@ footer {text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
     <pre id="logs">Menunggu aksi...</pre>
   </div>
 
-  <footer>ARCLIQ Deploy Lite v2 — WalletConnect + MetaMask Support</footer>
+  <footer>ARCLIQ Deploy Lite v3 — WalletConnect Auto Fallback Ready</footer>
 </div>
 
-<!-- Ethers.js -->
 <script type="module">
 import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.min.js";
 import * as solc from "https://cdn.jsdelivr.net/npm/solc@0.8.22/+esm";
-import { createWeb3Modal, defaultConfig } from "https://unpkg.com/@web3modal/ethers@3.1.1/dist/index.js";
+import { WalletConnectProvider } from "https://cdn.jsdelivr.net/npm/@walletconnect/ethereum-provider@2.11.0/dist/index.min.js";
 
-// === Web3Modal Setup ===
-const projectId = "b7a316c963d94c48a4d4d3b5f3a9cf08"; // contoh (gunakan projectId sendiri dari cloud.walletconnect.com)
-const metadata = {
-  name: "ARCLIQ Deploy Lite",
-  description: "Deploy Solidity contracts to Arc Testnet",
-  url: window.location.href,
-  icons: ["https://avatars.githubusercontent.com/u/37784886?s=200&v=4"]
-};
-const chains = [{
-  chainId: 5042002,
-  name: "Arc Testnet",
-  currency: "USDC",
-  rpcUrl: "https://rpc.testnet.arc.network"
-}];
-
-const modal = createWeb3Modal({
-  ethersConfig: defaultConfig({ metadata }),
-  chains,
-  projectId,
-  enableAnalytics: false
-});
-
-// === DOM ===
 const logEl = document.getElementById('logs');
-const connectBtn = document.getElementById('connectBtn');
-const walletInfo = document.getElementById('walletInfo');
-function log(msg){ logEl.textContent += "\n" + msg; logEl.scrollTop = logEl.scrollHeight; }
+function log(msg){ logEl.textContent += "\\n" + msg; logEl.scrollTop = logEl.scrollHeight; }
 
-// === State ===
-let signer, provider, walletAddr;
+let provider, signer, walletAddr;
 
-// === Connect ===
-connectBtn.onclick = async () => {
-  try {
-    const walletProvider = await modal.open(); // wallet selection modal
-    provider = new ethers.BrowserProvider(walletProvider);
+async function initWallet() {
+  if (window.ethereum) {
+    // MetaMask detected
+    provider = new ethers.BrowserProvider(window.ethereum);
+    await provider.send("eth_requestAccounts", []);
     signer = await provider.getSigner();
     walletAddr = await signer.getAddress();
     const net = await provider.getNetwork();
-    walletInfo.textContent = `Connected: ${walletAddr} | ChainId: ${net.chainId}`;
-    log(`✅ Wallet terhubung: ${walletAddr}`);
-  } catch (err) {
-    log(`❌ Gagal konek wallet: ${err.message}`);
+    log(`✅ Connected via MetaMask: ${walletAddr} (Chain ${net.chainId})`);
+    return;
+  }
+
+  // Fallback ke WalletConnect
+  log("⚡ No MetaMask detected, using WalletConnect...");
+  const wcProvider = await WalletConnectProvider.init({
+    projectId: "b7a316c963d94c48a4d4d3b5f3a9cf08", // ganti pakai ID sendiri nanti
+    chains: [5042002],
+    rpcMap: {5042002: "https://rpc.testnet.arc.network"},
+    showQrModal: true
+  });
+
+  await wcProvider.enable();
+  provider = new ethers.BrowserProvider(wcProvider);
+  signer = await provider.getSigner();
+  walletAddr = await signer.getAddress();
+  log(`✅ Connected via WalletConnect: ${walletAddr}`);
+}
+
+document.getElementById('connectBtn').onclick = async()=>{
+  try {
+    await initWallet();
+    document.getElementById('walletInfo').textContent = "Connected: " + walletAddr;
+  } catch (e) {
+    log("❌ Gagal konek wallet: " + e.message);
   }
 };
 
-// === Upload & Compile ===
 let sourceCode = "";
 document.getElementById('fileInput').addEventListener('change', async(e)=>{
   const file = e.target.files[0];
@@ -166,7 +160,6 @@ document.getElementById('compileBtn').onclick = ()=>{
   } catch(e){ log('❌ Error compile: '+e.message); }
 };
 
-// === Deploy ===
 document.getElementById('deployBtn').onclick = async()=>{
   if(!window.compiledOutput){ alert("Compile dulu!"); return; }
   const name = document.getElementById('contractName').value.trim();
