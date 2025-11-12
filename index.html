@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>ARCLIQ Deploy Lite</title>
+<title>ARCLIQ Deploy Lite v2</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -21,59 +21,33 @@ body {
   padding:20px;
   margin:0;
 }
-.container {
-  max-width:800px;
-  margin:auto;
-}
-h1 {
-  font-size:20px;
-  margin-bottom:4px;
-}
-.sub {
-  color:var(--muted);
-  font-size:13px;
-  margin-bottom:16px;
-}
+.container {max-width:800px;margin:auto}
+h1 {font-size:20px;margin-bottom:4px}
+.sub {color:var(--muted);font-size:13px;margin-bottom:16px}
 .card {
   background:var(--card);
   border-radius:var(--radius);
   box-shadow:0 4px 12px rgba(0,0,0,0.06);
-  padding:16px;
-  margin-bottom:16px;
+  padding:16px;margin-bottom:16px;
 }
 input,textarea,select,button {
-  width:100%;
-  font-family:inherit;
-  font-size:14px;
-  border-radius:var(--radius);
-  border:1px solid #e2e8f0;
-  padding:10px;
-  margin-top:8px;
+  width:100%;font-family:inherit;font-size:14px;
+  border-radius:var(--radius);border:1px solid #e2e8f0;
+  padding:10px;margin-top:8px;
 }
-button {
-  background:var(--blue);
-  color:#fff;
-  font-weight:600;
-  border:0;
-  cursor:pointer;
-}
+button {background:var(--blue);color:#fff;font-weight:600;border:0;cursor:pointer}
 button:hover {opacity:0.9}
-.small {font-size:12px;color:var(--muted);}
+.small {font-size:12px;color:var(--muted)}
 pre {
-  background:#071b26;
-  color:#bfeef9;
-  padding:10px;
-  border-radius:var(--radius);
-  overflow:auto;
-  font-size:12px;
-  max-height:220px;
+  background:#071b26;color:#bfeef9;padding:10px;
+  border-radius:var(--radius);overflow:auto;font-size:12px;max-height:220px;
 }
 footer {text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
 </style>
 </head>
 <body>
 <div class="container">
-  <h1>ARCLIQ Deploy Lite ⚡</h1>
+  <h1>ARCLIQ Deploy Lite ⚡ v2</h1>
   <div class="sub">Deploy Solidity contract langsung ke Arc Testnet (5042002)</div>
 
   <div class="card">
@@ -109,34 +83,63 @@ footer {text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
     <pre id="logs">Menunggu aksi...</pre>
   </div>
 
-  <footer>ARCLIQ Deploy Lite — Arc Testnet RPC: https://rpc.testnet.arc.network</footer>
+  <footer>ARCLIQ Deploy Lite v2 — WalletConnect + MetaMask Support</footer>
 </div>
 
+<!-- Ethers.js -->
 <script type="module">
 import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.min.js";
 import * as solc from "https://cdn.jsdelivr.net/npm/solc@0.8.22/+esm";
+import { createWeb3Modal, defaultConfig } from "https://unpkg.com/@web3modal/ethers@3.1.1/dist/index.js";
 
+// === Web3Modal Setup ===
+const projectId = "b7a316c963d94c48a4d4d3b5f3a9cf08"; // contoh (gunakan projectId sendiri dari cloud.walletconnect.com)
+const metadata = {
+  name: "ARCLIQ Deploy Lite",
+  description: "Deploy Solidity contracts to Arc Testnet",
+  url: window.location.href,
+  icons: ["https://avatars.githubusercontent.com/u/37784886?s=200&v=4"]
+};
+const chains = [{
+  chainId: 5042002,
+  name: "Arc Testnet",
+  currency: "USDC",
+  rpcUrl: "https://rpc.testnet.arc.network"
+}];
+
+const modal = createWeb3Modal({
+  ethersConfig: defaultConfig({ metadata }),
+  chains,
+  projectId,
+  enableAnalytics: false
+});
+
+// === DOM ===
 const logEl = document.getElementById('logs');
-function log(msg){ logEl.textContent += "\\n" + msg; logEl.scrollTop = logEl.scrollHeight; }
-
 const connectBtn = document.getElementById('connectBtn');
 const walletInfo = document.getElementById('walletInfo');
-let signer, walletAddr, provider;
+function log(msg){ logEl.textContent += "\n" + msg; logEl.scrollTop = logEl.scrollHeight; }
 
-connectBtn.onclick = async ()=>{
-  if(!window.ethereum){ alert('Browser tidak support Web3. Gunakan MetaMask / OKX.'); return; }
-  provider = new ethers.BrowserProvider(window.ethereum);
-  await provider.send("eth_requestAccounts",[]);
-  signer = await provider.getSigner();
-  walletAddr = await signer.getAddress();
-  const net = await provider.getNetwork();
-  walletInfo.textContent = `Connected: ${walletAddr} | ChainId: ${net.chainId}`;
-  log(`✅ Wallet terhubung: ${walletAddr}`);
-  if(net.chainId !== 5042002) log('⚠️ Peringatan: bukan Arc Testnet (5042002)');
+// === State ===
+let signer, provider, walletAddr;
+
+// === Connect ===
+connectBtn.onclick = async () => {
+  try {
+    const walletProvider = await modal.open(); // wallet selection modal
+    provider = new ethers.BrowserProvider(walletProvider);
+    signer = await provider.getSigner();
+    walletAddr = await signer.getAddress();
+    const net = await provider.getNetwork();
+    walletInfo.textContent = `Connected: ${walletAddr} | ChainId: ${net.chainId}`;
+    log(`✅ Wallet terhubung: ${walletAddr}`);
+  } catch (err) {
+    log(`❌ Gagal konek wallet: ${err.message}`);
+  }
 };
 
+// === Upload & Compile ===
 let sourceCode = "";
-
 document.getElementById('fileInput').addEventListener('change', async(e)=>{
   const file = e.target.files[0];
   if(file){
@@ -160,33 +163,30 @@ document.getElementById('compileBtn').onclick = ()=>{
     const output = JSON.parse(solc.compile(JSON.stringify(input)));
     window.compiledOutput = output;
     log('✅ Compile selesai. Siap deploy.');
-    console.log(output);
-  } catch(e){
-    log('❌ Error compile: '+e.message);
-  }
+  } catch(e){ log('❌ Error compile: '+e.message); }
 };
 
+// === Deploy ===
 document.getElementById('deployBtn').onclick = async()=>{
   if(!window.compiledOutput){ alert("Compile dulu!"); return; }
-  const contractName = document.getElementById('contractName').value.trim();
-  if(!contractName){ alert("Isi nama kontrak yang ingin di-deploy."); return; }
+  const name = document.getElementById('contractName').value.trim();
+  if(!name){ alert("Isi nama kontrak!"); return; }
 
-  const compiled = window.compiledOutput.contracts['input.sol'][contractName];
-  if(!compiled){ alert("Nama kontrak tidak ditemukan di file Solidity."); return; }
+  const compiled = window.compiledOutput.contracts['input.sol'][name];
+  if(!compiled){ alert("Nama kontrak tidak ditemukan."); return; }
 
   const abi = compiled.abi;
   const bytecode = compiled.evm.bytecode.object;
-  log(`🚀 Deploying ${contractName}...`);
-
+  log(`🚀 Deploying ${name}...`);
   try{
     const factory = new ethers.ContractFactory(abi, bytecode, signer);
     const contract = await factory.deploy();
     log(`⏳ TX sent: ${contract.deploymentTransaction().hash}`);
     await contract.waitForDeployment();
     const addr = await contract.getAddress();
-    log(`✅ Contract ${contractName} deployed: ${addr}`);
+    log(`✅ ${name} deployed: ${addr}`);
   }catch(e){
-    log(`❌ Error deploy: ${e.message}`);
+    log(`❌ Deploy gagal: ${e.message}`);
   }
 };
 </script>
