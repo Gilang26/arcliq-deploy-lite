@@ -1,0 +1,194 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>ARCLIQ Deploy Lite</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600&display=swap" rel="stylesheet">
+<style>
+:root {
+  --blue:#2596BE;
+  --bg:#f9fafc;
+  --card:#ffffff;
+  --text:#0f172a;
+  --muted:#64748b;
+  --radius:12px;
+}
+body {
+  font-family:Inter,Arial,sans-serif;
+  background:var(--bg);
+  color:var(--text);
+  padding:20px;
+  margin:0;
+}
+.container {
+  max-width:800px;
+  margin:auto;
+}
+h1 {
+  font-size:20px;
+  margin-bottom:4px;
+}
+.sub {
+  color:var(--muted);
+  font-size:13px;
+  margin-bottom:16px;
+}
+.card {
+  background:var(--card);
+  border-radius:var(--radius);
+  box-shadow:0 4px 12px rgba(0,0,0,0.06);
+  padding:16px;
+  margin-bottom:16px;
+}
+input,textarea,select,button {
+  width:100%;
+  font-family:inherit;
+  font-size:14px;
+  border-radius:var(--radius);
+  border:1px solid #e2e8f0;
+  padding:10px;
+  margin-top:8px;
+}
+button {
+  background:var(--blue);
+  color:#fff;
+  font-weight:600;
+  border:0;
+  cursor:pointer;
+}
+button:hover {opacity:0.9}
+.small {font-size:12px;color:var(--muted);}
+pre {
+  background:#071b26;
+  color:#bfeef9;
+  padding:10px;
+  border-radius:var(--radius);
+  overflow:auto;
+  font-size:12px;
+  max-height:220px;
+}
+footer {text-align:center;color:var(--muted);font-size:12px;margin-top:20px}
+</style>
+</head>
+<body>
+<div class="container">
+  <h1>ARCLIQ Deploy Lite ⚡</h1>
+  <div class="sub">Deploy Solidity contract langsung ke Arc Testnet (5042002)</div>
+
+  <div class="card">
+    <button id="connectBtn">🔗 Connect Wallet</button>
+    <div id="walletInfo" class="small">Belum terhubung</div>
+  </div>
+
+  <div class="card">
+    <label><strong>1️⃣ Upload atau paste kode Solidity (.sol)</strong></label>
+    <input type="file" id="fileInput" accept=".sol">
+    <div style="text-align:center;margin:8px 0">atau</div>
+    <textarea id="codeInput" rows="10" placeholder="Paste kode Solidity di sini..."></textarea>
+  </div>
+
+  <div class="card">
+    <label><strong>2️⃣ Pilih versi compiler</strong></label>
+    <select id="compilerSelect">
+      <option value="0.8.22">0.8.22 (default)</option>
+      <option value="0.8.20">0.8.20</option>
+      <option value="0.8.17">0.8.17</option>
+    </select>
+    <button id="compileBtn">🧩 Compile</button>
+  </div>
+
+  <div class="card">
+    <label><strong>3️⃣ Deploy Contract</strong></label>
+    <input type="text" id="contractName" placeholder="Nama kontrak (contoh: ArcFactory)">
+    <button id="deployBtn">🚀 Deploy ke Arc Testnet</button>
+  </div>
+
+  <div class="card">
+    <strong>Logs</strong>
+    <pre id="logs">Menunggu aksi...</pre>
+  </div>
+
+  <footer>ARCLIQ Deploy Lite — Arc Testnet RPC: https://rpc.testnet.arc.network</footer>
+</div>
+
+<script type="module">
+import { ethers } from "https://cdn.jsdelivr.net/npm/ethers@6.9.0/dist/ethers.min.js";
+import * as solc from "https://cdn.jsdelivr.net/npm/solc@0.8.22/+esm";
+
+const logEl = document.getElementById('logs');
+function log(msg){ logEl.textContent += "\\n" + msg; logEl.scrollTop = logEl.scrollHeight; }
+
+const connectBtn = document.getElementById('connectBtn');
+const walletInfo = document.getElementById('walletInfo');
+let signer, walletAddr, provider;
+
+connectBtn.onclick = async ()=>{
+  if(!window.ethereum){ alert('Browser tidak support Web3. Gunakan MetaMask / OKX.'); return; }
+  provider = new ethers.BrowserProvider(window.ethereum);
+  await provider.send("eth_requestAccounts",[]);
+  signer = await provider.getSigner();
+  walletAddr = await signer.getAddress();
+  const net = await provider.getNetwork();
+  walletInfo.textContent = `Connected: ${walletAddr} | ChainId: ${net.chainId}`;
+  log(`✅ Wallet terhubung: ${walletAddr}`);
+  if(net.chainId !== 5042002) log('⚠️ Peringatan: bukan Arc Testnet (5042002)');
+};
+
+let sourceCode = "";
+
+document.getElementById('fileInput').addEventListener('change', async(e)=>{
+  const file = e.target.files[0];
+  if(file){
+    const text = await file.text();
+    sourceCode = text;
+    document.getElementById('codeInput').value = text;
+    log(`📄 File ${file.name} dimuat`);
+  }
+});
+
+document.getElementById('compileBtn').onclick = ()=>{
+  sourceCode = document.getElementById('codeInput').value;
+  if(!sourceCode.trim()){ alert("Masukkan kode Solidity!"); return; }
+  log('🧩 Meng-compile kontrak...');
+  try{
+    const input = {
+      language: 'Solidity',
+      sources: {'input.sol': {content: sourceCode}},
+      settings: {outputSelection: {'*': {'*': ['abi','evm.bytecode']}}}
+    };
+    const output = JSON.parse(solc.compile(JSON.stringify(input)));
+    window.compiledOutput = output;
+    log('✅ Compile selesai. Siap deploy.');
+    console.log(output);
+  } catch(e){
+    log('❌ Error compile: '+e.message);
+  }
+};
+
+document.getElementById('deployBtn').onclick = async()=>{
+  if(!window.compiledOutput){ alert("Compile dulu!"); return; }
+  const contractName = document.getElementById('contractName').value.trim();
+  if(!contractName){ alert("Isi nama kontrak yang ingin di-deploy."); return; }
+
+  const compiled = window.compiledOutput.contracts['input.sol'][contractName];
+  if(!compiled){ alert("Nama kontrak tidak ditemukan di file Solidity."); return; }
+
+  const abi = compiled.abi;
+  const bytecode = compiled.evm.bytecode.object;
+  log(`🚀 Deploying ${contractName}...`);
+
+  try{
+    const factory = new ethers.ContractFactory(abi, bytecode, signer);
+    const contract = await factory.deploy();
+    log(`⏳ TX sent: ${contract.deploymentTransaction().hash}`);
+    await contract.waitForDeployment();
+    const addr = await contract.getAddress();
+    log(`✅ Contract ${contractName} deployed: ${addr}`);
+  }catch(e){
+    log(`❌ Error deploy: ${e.message}`);
+  }
+};
+</script>
+</body>
+</html>
